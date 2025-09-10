@@ -23,9 +23,6 @@ export async function GET() {
     // Parse data
     const data = await response.json();
 
-    // Optional: add logs
-    console.log("API Response:", data);
-
     // Return data
     return NextResponse.json(data, {
       status: 200,

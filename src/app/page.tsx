@@ -1,31 +1,36 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { setMilliseconds, setSeconds } from "date-fns";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMessages } from "@/hooks/useMessages";
 import { useMessageGroups } from "@/utils/dateGrouping";
-import { Message } from "@/types/MessagesProps";
 import {
   DateFilter,
   MessageTypeFilter,
   MessageGroup,
 } from "@/types/FiltersProps";
 import FiltersBar from "@/components/FiltersBar";
-import { setMilliseconds, setSeconds, format } from "date-fns";
+import { MessageCard } from "@/components/MessageCard";
+import GenericButton from "@/ui/GenericButton";
 
 export default function MessagesPage() {
   const { messages, loading, error, refetch } = useMessages();
 
+  const messagesStartRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const [dateFilter, setDateFilter] = useState<DateFilter>({
-    showToday: true,
-    showYesterday: true,
-    showThisWeek: true,
-    showOlder: true,
+    showToday: false,
+    showYesterday: false,
+    showThisWeek: false,
+    showOlder: false,
   });
 
   const [messageTypeFilter, setMessageTypeFilter] = useState<MessageTypeFilter>(
     {
-      showBot: true,
-      showCustomer: true,
-      showBusiness: true,
+      showBot: false,
+      showCustomer: false,
+      showBusiness: false,
       showDeleted: false,
     }
   );
@@ -37,30 +42,37 @@ export default function MessagesPage() {
   const filteredGroups = useMemo(() => {
     return groups
       .map((group) => {
-        // --- filtro por fecha ---
-        let dateMatch = false;
-        if (dateFilter.showToday && group.isToday) dateMatch = true;
-        if (dateFilter.showYesterday && group.isYesterday) dateMatch = true;
-        if (
-          dateFilter.showThisWeek &&
-          group.isThisWeek &&
-          !group.isToday &&
-          !group.isYesterday
-        )
-          dateMatch = true;
-        if (
-          dateFilter.showOlder &&
-          !group.isToday &&
-          !group.isYesterday &&
-          !group.isThisWeek
-        ) {
-          dateMatch = true;
+        // Filter By Date
+        const anyDateFilterActive = Object.values(dateFilter).some(Boolean);
+        let dateMatch = true; // If there is not filters, all pass
+
+        if (anyDateFilterActive) {
+          dateMatch = false;
+          if (dateFilter.showToday && group.isToday) dateMatch = true;
+          if (dateFilter.showYesterday && group.isYesterday) dateMatch = true;
+          if (
+            dateFilter.showThisWeek &&
+            group.isThisWeek &&
+            !group.isToday &&
+            !group.isYesterday
+          )
+            dateMatch = true;
+          if (
+            dateFilter.showOlder &&
+            !group.isToday &&
+            !group.isYesterday &&
+            !group.isThisWeek
+          )
+            dateMatch = true;
         }
 
         if (!dateMatch) return null;
 
-        // --- filtro por tipo ---
+        // Filters By Type
+        const anyTypeFilterActive =
+          Object.values(messageTypeFilter).some(Boolean);
         const filteredMessages = group.messages.filter((msg) => {
+          if (!anyTypeFilterActive) return true;
           if (messageTypeFilter.showDeleted && msg.is_deleted) return true;
           if (messageTypeFilter.showBot && msg.bot_sender) return true;
           if (messageTypeFilter.showCustomer && msg.sent_by_customer)
@@ -101,7 +113,7 @@ export default function MessagesPage() {
     });
   };
 
-  // Loading State
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -113,7 +125,7 @@ export default function MessagesPage() {
     );
   }
 
-  // Estados de error
+  // Error states
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -137,8 +149,10 @@ export default function MessagesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <div ref={messagesStartRef} />
+
       {/* Header */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+      <header className="bg-white shadow-sm border-b sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">
@@ -167,73 +181,66 @@ export default function MessagesPage() {
 
       {/* Contenedor principal */}
       <main className="max-w-4xl mx-auto px-4 py-6">
-        {messages.length === 0 ? (
+        {filteredGroups.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">
               No hay mensajes para mostrar
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 w-full gap-4 md:grid-cols-3">
-            {messages.map((message, index) => {
-              const fixDate = setMilliseconds(
-                setSeconds(new Date(message.message_date), 0),
-                0
-              );
+          <div className="space-y-6">
+            {filteredGroups.map((group) => (
+              <div key={group.date}>
+                {/* Header de fecha */}
+                <div className="sticky top-20 bg-gray-50 px-2 py-1 text-gray-700 font-semibold border-b border-gray-200 z-10">
+                  {group.label}
+                </div>
 
-              return (
-                <MessageCard
-                  key={`${message.customer}-${fixDate}-${index}`}
-                  message={message}
-                />
-              );
-            })}
+                {/* Mensajes del grupo */}
+                <div className="space-y-4 mt-2">
+                  {group.messages.map((message, idx) => {
+                    const fixDate = setMilliseconds(
+                      setSeconds(new Date(message.message_date), 0),
+                      0
+                    );
+                    return (
+                      <MessageCard
+                        key={`${message.customer}-${fixDate}-${idx}`}
+                        message={message}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-// Componente temporal para mostrar mensajes (lo mejoraremos después)
-function MessageCard({ message }: { message: Message }) {
-  const isBot = message.bot_sender;
-  const isCustomer = message.sent_by_customer;
-  const fixedDate = setMilliseconds(
-    setSeconds(new Date(message.message_date), 0),
-    0
-  );
-
-  const formattedDate = format(fixedDate, "yyyy-MM-dd HH:mm");
-
-  return (
-    <div
-      className={`p-4 rounded-lg border ${
-        isBot
-          ? "bg-blue-50 border-blue-200"
-          : isCustomer
-          ? "bg-green-50 border-green-200"
-          : "bg-gray-50 border-gray-200"
-      }`}
-    >
-      <div className="flex justify-between items-start mb-2">
-        <span
-          className={`text-sm font-medium ${
-            isBot
-              ? "text-blue-700"
-              : isCustomer
-              ? "text-green-700"
-              : "text-gray-700"
-          }`}
+      <div className="flex flex-col gap-2 fixed right-2 top-20 md:bottom-8 md:top-auto z-50">
+        <GenericButton
+          variant="jump"
+          size="small"
+          spanClassName="ms-3"
+          onClick={() =>
+            messagesStartRef.current?.scrollIntoView({ behavior: "smooth" })
+          }
+          icon={<ArrowUp className="w-5 h-5 text-white" />}
         >
-          {isBot ? "🤖 Bot" : isCustomer ? "👤 Client" : "🏢 Business"}
-        </span>
-        <span className="text-xs text-gray-500">{formattedDate}</span>
+          Go Top
+        </GenericButton>
+
+        <GenericButton
+          variant="jump"
+          size="small"
+          onClick={() =>
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+          }
+          icon={<ArrowDown className="w-5 h-5 text-white" />}
+        >
+          Go Bottom
+        </GenericButton>
       </div>
-      <p className="text-gray-800">{message.message_text}</p>
-      <div className="mt-2 text-xs text-gray-400">
-        Cliente #{message.customer} • {message.platform}
-      </div>
+      <div ref={messagesEndRef} />
     </div>
   );
 }

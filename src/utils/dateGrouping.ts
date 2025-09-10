@@ -1,80 +1,62 @@
 import { Message } from "@/types/MessagesProps";
 import { MessageGroup } from "@/types/FiltersProps";
+import { format, isToday, isYesterday, isThisWeek } from "date-fns";
 
-export function getDateLabel(date: Date, today: Date): string {
-  const diffTime = today.getTime() - date.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return "Today";
-  } else if (diffDays === 1) {
-    return "Yesterday";
-  } else if (diffDays <= 7) {
-    return "This Week";
-  } else if (diffDays <= 14) {
-    return "Last Week";
-  } else if (date.getFullYear() === today.getFullYear()) {
-    // Mismo año: "15 de Junio"
-    return date.toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "long",
-    });
-  } else {
-    // Año diferente: "15 de Junio 2024"
-    return date.toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  }
+export function getDateLabel(date: Date): string {
+  if (isToday(date)) return "Today";
+  if (isYesterday(date)) return "Yesterday";
+  if (isThisWeek(date)) return "This Week";
+  return date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 export function groupMessagesByDate(messages: Message[]): MessageGroup[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Reset at midnight for accurate comparisons
+  const cutoffDate = new Date("2025-06-15");
 
-  // Grouping by date (string YYYY-MM-DD)
   const grouped = messages.reduce((acc, message) => {
     const messageDate = new Date(message.message_date);
-    const dateKey = messageDate.toISOString().split("T")[0]; // "2025-06-01"
+    const dateKey = format(messageDate, "MM-dd-yyyy"); // MM-dd-yyyy
 
-    if (!acc[dateKey]) {
-      acc[dateKey] = [];
-    }
+    if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(message);
 
     return acc;
   }, {} as Record<string, Message[]>);
 
-  // Convert to an array of MessageGroup and add labels
   const groups: MessageGroup[] = Object.entries(grouped).map(
     ([dateKey, messages]) => {
-      const date = new Date(dateKey + "T00:00:00");
-      const diffTime = today.getTime() - date.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      // Parse seguro con MM-dd-yyyy
+      const [month, day, year] = dateKey.split("-").map(Number);
+      const date = new Date(year, month - 1, day);
 
       return {
         date: dateKey,
-        label: getDateLabel(date, today),
+        label: getDateLabel(date),
         messages: messages.sort(
           (a, b) =>
             new Date(a.message_date).getTime() -
             new Date(b.message_date).getTime()
-        ), // Sort messages into the group by hour
-        isToday: diffDays === 0,
-        isYesterday: diffDays === 1,
-        isThisWeek: diffDays <= 7,
+        ),
+        isRecent: date >= cutoffDate,
+        isOlder: date < cutoffDate,
       };
     }
   );
 
-  // Sort groups by dates (recentlier first)
-  return groups.sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+  // Ordenar grupos más recientes primero
+  return groups.sort((a, b) => {
+    const [am, ad, ay] = a.date.split("-").map(Number);
+    const [bm, bd, by] = b.date.split("-").map(Number);
+    const dateA = new Date(ay, am - 1, ad);
+    const dateB = new Date(by, bm - 1, bd);
+    return dateB.getTime() - dateA.getTime();
+  });
 }
 
-// Hook for use the grouping
+// Hook
 export function useMessageGroups(messages: Message[]): MessageGroup[] {
   return groupMessagesByDate(messages);
 }

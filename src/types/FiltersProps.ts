@@ -4,10 +4,13 @@ export interface MessageGroup {
   date: string;
   label: string;
   messages: Message[];
+  isRecent?: boolean;
+  isOlder?: boolean;
   isToday?: boolean;
   isYesterday?: boolean;
   isThisWeek?: boolean;
 }
+
 export interface DateFilter {
   showToday: boolean;
   showYesterday: boolean;
