@@ -19,86 +19,18 @@ export default function MessagesPage() {
 
   const messagesStartRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const isAtBottom = useRef(true);
   const messageRefs = useRef<HTMLDivElement[]>([]);
 
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  // Detect scroll to bottom
-  const onScroll = () => {
-    const scrollContainer = document.documentElement;
-    const bottom =
-      scrollContainer.scrollHeight -
-      scrollContainer.scrollTop -
-      window.innerHeight;
-    isAtBottom.current = bottom < 50;
-  };
-
-  useEffect(() => {
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Auto-scroll on new messages if at bottom
-  useEffect(() => {
-    if (isAtBottom.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
-
-  // Keyboard navigation + copy
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!messageRefs.current.length) return;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((prev) => {
-          const next =
-            prev === null
-              ? 0
-              : Math.min(prev + 1, messageRefs.current.length - 1);
-          return next;
-        });
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((prev) => {
-          const next = prev === null ? 0 : Math.max(prev - 1, 0);
-          return next;
-        });
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (activeIndex !== null) {
-          const msgDiv = messageRefs.current[activeIndex];
-          if (msgDiv) {
-            const text = msgDiv.dataset.messageText;
-            if (text) navigator.clipboard.writeText(text);
-          }
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeIndex]);
-
-  // Focus active message
-  useEffect(() => {
-    if (activeIndex !== null) {
-      const el = messageRefs.current[activeIndex];
-      el?.focus();
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [activeIndex]);
-
-  const renderedMessageKeys = useRef<Set<string>>(new Set());
-  const renderedGroupKeys = useRef<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<DateFilter>({
     showToday: false,
     showYesterday: false,
     showThisWeek: false,
     showOlder: false,
   });
+
   const [messageTypeFilter, setMessageTypeFilter] = useState<MessageTypeFilter>(
     {
       showBot: false,
@@ -152,6 +84,7 @@ export default function MessagesPage() {
             return true;
           return false;
         });
+
         if (!filteredMessages.length) return null;
         return { ...group, messages: filteredMessages };
       })
@@ -162,6 +95,9 @@ export default function MessagesPage() {
     () => filteredGroups.reduce((acc, g) => acc + g.messages.length, 0),
     [filteredGroups]
   );
+
+  const renderedMessageKeys = useRef<Set<string>>(new Set());
+  const renderedGroupKeys = useRef<Set<string>>(new Set());
 
   const resetFilters = () => {
     setDateFilter({
@@ -177,6 +113,65 @@ export default function MessagesPage() {
       showDeleted: false,
     });
   };
+
+  // Keyboard navigation + copy
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!messageRefs.current.length) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((prev) => {
+          const next =
+            prev === null
+              ? 0
+              : Math.min(prev + 1, messageRefs.current.length - 1);
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((prev) => {
+          const next = prev === null ? 0 : Math.max(prev - 1, 0);
+          return next;
+        });
+      } else if (
+        e.key === "Enter" ||
+        (e.ctrlKey && e.key.toLowerCase() === "c")
+      ) {
+        e.preventDefault();
+        if (activeIndex !== null) {
+          const msgDiv = messageRefs.current[activeIndex];
+          if (msgDiv) {
+            const text = msgDiv.dataset.messageText;
+            if (text) {
+              navigator.clipboard.writeText(text);
+              setCopiedIndex(activeIndex);
+              setTimeout(() => setCopiedIndex(null), 1500);
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeIndex]);
+
+  // Focus active message
+  useEffect(() => {
+    if (activeIndex !== null) {
+      const el = messageRefs.current[activeIndex];
+      el?.focus();
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeIndex]);
+
+  // Initial Scroll Up
+  useEffect(() => {
+    messagesStartRef.current?.scrollIntoView();
+  }, []);
+
+  let globalIndex = 0;
 
   // Loading
   if (loading) {
@@ -213,7 +208,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-blue-100">
+    <div className="min-h-screen bg-blue-100 relative">
       <div id="messagesStart" ref={messagesStartRef} />
 
       {/* Header */}
@@ -261,16 +256,23 @@ export default function MessagesPage() {
               const groupKey = group.date;
               const isNewGroup = !renderedGroupKeys.current.has(groupKey);
               renderedGroupKeys.current.add(groupKey);
+
               return (
                 <motion.div
                   key={groupKey}
-                  initial={isNewGroup ? "hidden" : "visible"}
-                  animate="visible"
-                  exit="exit"
+                  initial={isNewGroup ? { opacity: 0, y: -10 } : undefined}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <div>{group.label}</div>
-                  <div className="space-y-4 mt-2">
-                    {group.messages.map((message, index) => {
+                  {/* Sticky group label */}
+                  <div className="sticky top-32 md:top-20 bg-gray-50 px-2 py-1 text-gray-700 font-semibold border-b border-gray-200 z-10 mt-4 mb-1">
+                    {group.label}
+                  </div>
+
+                  <div className="space-y-4 relative">
+                    {group.messages.map((message) => {
+                      const index = globalIndex++;
                       const fixDate = setMilliseconds(
                         setSeconds(new Date(message.message_date), 0),
                         0
@@ -288,12 +290,27 @@ export default function MessagesPage() {
                           }}
                           tabIndex={0}
                           data-message-text={message.message_text}
-                          initial={isNewMessage ? "hidden" : "visible"}
-                          animate="visible"
-                          exit="exit"
+                          initial={
+                            isNewMessage ? { opacity: 0, y: 5 } : undefined
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -5 }}
                           transition={{ duration: 0.3 }}
+                          className="relative"
                         >
                           <MessageCard message={message} />
+
+                          {/* Pop-up "Copied!" */}
+                          {copiedIndex === index && (
+                            <motion.span
+                              initial={{ opacity: 0, y: -5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -5 }}
+                              className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap z-20"
+                            >
+                              Copied!
+                            </motion.span>
+                          )}
                         </motion.div>
                       );
                     })}
