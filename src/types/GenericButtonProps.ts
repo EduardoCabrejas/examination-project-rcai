@@ -1,7 +1,7 @@
 import { LinkProps } from "next/link";
 
-export type ButtonVariant = "primary" | "secondary" | "jump";
-export type ButtonSize = "small" | "medium" | "large";
+export type ButtonVariant = "search" | "refresh" | "jump";
+export type ButtonSize = "xSmall" | "small" | "medium" | "large";
 
 interface BaseProps {
   children: React.ReactNode;
@@ -16,15 +16,35 @@ interface BaseProps {
   disabled?: boolean;
 }
 
+// --- ScrollButtonProps ---
+export interface ScrollButtonProps extends BaseProps {
+  to: string;
+  smooth?: boolean;
+  duration?: number;
+  offset?: number;
+  href?: undefined;
+  onClick?: never;
+}
+
+// --- ButtonProps ---
 type ButtonProps = BaseProps &
-  Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "size" | "children"> & {
+  Omit<
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
+    "size" | "children" | "type"
+  > & {
     href?: undefined;
+    to?: undefined;
   };
 
-type LinkButtonProps = BaseProps &
-  Omit<LinkProps, "children"> & {
+// --- LinkButtonProps ---
+export type LinkButtonProps = BaseProps &
+  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "children"> &
+  LinkProps & {
     href: string;
-    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+    to?: undefined;
   };
 
-export type GenericButtonProps = ButtonProps | LinkButtonProps;
+export type GenericButtonProps =
+  | ButtonProps
+  | LinkButtonProps
+  | ScrollButtonProps;

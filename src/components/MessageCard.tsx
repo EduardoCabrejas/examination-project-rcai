@@ -13,7 +13,15 @@ export function MessageCard({ message }: { message: Message }) {
   const formattedDate = format(fixedDate, "MM-dd-yyyy HH:mm");
 
   return (
-    <div
+    <section
+      role="article"
+      aria-label={`${
+        message.bot_sender
+          ? "Bot Message"
+          : message.sent_by_customer
+          ? "Client Message"
+          : "Business Message"
+      }: ${message.message_text}`}
       className={`p-4 rounded-lg border ${
         isBot
           ? "bg-blue-50 border-blue-200"
@@ -40,6 +48,6 @@ export function MessageCard({ message }: { message: Message }) {
       <div className="mt-2 text-xs text-gray-400">
         Cliente #{message.customer} • {message.platform}
       </div>
-    </div>
+    </section>
   );
 }
