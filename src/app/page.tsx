@@ -1,180 +1,42 @@
 "use client";
-import { useState, useMemo, useRef, useEffect } from "react";
-import { setMilliseconds, setSeconds } from "date-fns";
+import { useState, useRef, useEffect } from "react";
 import { ArrowDown, ArrowUp, RefreshCcwIcon } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useMessages } from "@/hooks/useMessages";
-import { useMessageGroups } from "@/utils/dateGrouping";
-import {
-  DateFilter,
-  MessageTypeFilter,
-  MessageGroup,
-} from "@/types/FiltersProps";
 import FiltersBar from "@/components/FiltersBar";
-import { MessageCard } from "@/components/MessageCard";
 import GenericButton from "@/ui/GenericButton";
+import { useMessageFilters } from "@/hooks/useMessageFilters";
+import { useMessageNavigation } from "@/hooks/useMessageNavigation";
+import SearchBar from "@/components/SearchBar";
+import MessageGroupList from "@/components/MessageGroupList";
 
 export default function MessagesPage() {
   const { messages, loading, error, refetch } = useMessages();
+  const [query, setQuery] = useState("");
+
+  const {
+    dateFilter,
+    setDateFilter,
+    messageTypeFilter,
+    setMessageTypeFilter,
+    resetFilters,
+    filteredGroups,
+    filteredCount,
+  } = useMessageFilters(messages, query);
+
+  const messageRefs = useRef<HTMLDivElement[]>([]);
+  const { activeIndex, setActiveIndex, copiedIndex, setCopiedIndex } =
+    useMessageNavigation(messageRefs);
 
   const messagesStartRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messageRefs = useRef<HTMLDivElement[]>([]);
-
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-
-  const [dateFilter, setDateFilter] = useState<DateFilter>({
-    showToday: false,
-    showYesterday: false,
-    showThisWeek: false,
-    showOlder: false,
-  });
-
-  const [messageTypeFilter, setMessageTypeFilter] = useState<MessageTypeFilter>(
-    {
-      showBot: false,
-      showCustomer: false,
-      showBusiness: false,
-      showDeleted: false,
-    }
-  );
-
-  const groups = useMessageGroups(messages);
-
-  const filteredGroups = useMemo(() => {
-    return groups
-      .map((group) => {
-        const anyDateFilterActive = Object.values(dateFilter).some(Boolean);
-        let dateMatch = true;
-        if (anyDateFilterActive) {
-          dateMatch = false;
-          if (dateFilter.showToday && group.isToday) dateMatch = true;
-          if (dateFilter.showYesterday && group.isYesterday) dateMatch = true;
-          if (
-            dateFilter.showThisWeek &&
-            group.isThisWeek &&
-            !group.isToday &&
-            !group.isYesterday
-          )
-            dateMatch = true;
-          if (
-            dateFilter.showOlder &&
-            !group.isToday &&
-            !group.isYesterday &&
-            !group.isThisWeek
-          )
-            dateMatch = true;
-        }
-        if (!dateMatch) return null;
-
-        const anyTypeFilterActive =
-          Object.values(messageTypeFilter).some(Boolean);
-        const filteredMessages = group.messages.filter((msg) => {
-          if (!anyTypeFilterActive) return true;
-          if (messageTypeFilter.showDeleted && msg.is_deleted) return true;
-          if (messageTypeFilter.showBot && msg.bot_sender) return true;
-          if (messageTypeFilter.showCustomer && msg.sent_by_customer)
-            return true;
-          if (
-            messageTypeFilter.showBusiness &&
-            !msg.bot_sender &&
-            !msg.sent_by_customer
-          )
-            return true;
-          return false;
-        });
-
-        if (!filteredMessages.length) return null;
-        return { ...group, messages: filteredMessages };
-      })
-      .filter((g): g is MessageGroup => g !== null);
-  }, [groups, dateFilter, messageTypeFilter]);
-
-  const filteredCount = useMemo(
-    () => filteredGroups.reduce((acc, g) => acc + g.messages.length, 0),
-    [filteredGroups]
-  );
-
-  const renderedMessageKeys = useRef<Set<string>>(new Set());
-  const renderedGroupKeys = useRef<Set<string>>(new Set());
-
-  const resetFilters = () => {
-    setDateFilter({
-      showToday: true,
-      showYesterday: true,
-      showThisWeek: true,
-      showOlder: true,
-    });
-    setMessageTypeFilter({
-      showBot: true,
-      showCustomer: true,
-      showBusiness: true,
-      showDeleted: false,
-    });
-  };
-
-  // Keyboard navigation + copy
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!messageRefs.current.length) return;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((prev) => {
-          const next =
-            prev === null
-              ? 0
-              : Math.min(prev + 1, messageRefs.current.length - 1);
-          return next;
-        });
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((prev) => {
-          const next = prev === null ? 0 : Math.max(prev - 1, 0);
-          return next;
-        });
-      } else if (
-        e.key === "Enter" ||
-        (e.ctrlKey && e.key.toLowerCase() === "c")
-      ) {
-        e.preventDefault();
-        if (activeIndex !== null) {
-          const msgDiv = messageRefs.current[activeIndex];
-          if (msgDiv) {
-            const text = msgDiv.dataset.messageText;
-            if (text) {
-              navigator.clipboard.writeText(text);
-              setCopiedIndex(activeIndex);
-              setTimeout(() => setCopiedIndex(null), 1500);
-            }
-          }
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeIndex]);
-
-  // Focus active message
-  useEffect(() => {
-    if (activeIndex !== null) {
-      const el = messageRefs.current[activeIndex];
-      el?.focus();
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [activeIndex]);
 
   // Initial Scroll Up
   useEffect(() => {
     messagesStartRef.current?.scrollIntoView();
   }, []);
 
-  let globalIndex = 0;
-
-  // Loading
-  if (loading) {
+  // Loading state
+  if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -183,29 +45,27 @@ export default function MessagesPage() {
         </div>
       </div>
     );
-  }
 
-  // Error
-  if (error) {
+  // Error state
+  if (error)
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
             <h2 className="text-red-800 font-semibold mb-2">
-              Error al cargar mensajes
+              Error loading messages
             </h2>
             <p className="text-red-600 mb-4">{error}</p>
             <button
               onClick={refetch}
               className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
             >
-              Reintentar
+              Retry
             </button>
           </div>
         </div>
       </div>
     );
-  }
 
   return (
     <div className="min-h-screen bg-blue-100 relative">
@@ -213,113 +73,51 @@ export default function MessagesPage() {
 
       {/* Header */}
       <header className="bg-white shadow-sm border-b sticky top-0 z-20">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Messages ({messages.length})
-            </h1>
-
-            <GenericButton
-              variant="refresh"
-              size="medium"
-              onClick={refetch}
-              icon={<RefreshCcwIcon className="w-5 h-5 text-white" />}
-            >
-              Update
-            </GenericButton>
-          </div>
+        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Messages ({messages.length})
+          </h1>
+          <GenericButton
+            variant="refresh"
+            size="medium"
+            onClick={refetch}
+            icon={<RefreshCcwIcon className="w-5 h-5 text-white" />}
+          >
+            Update
+          </GenericButton>
         </div>
       </header>
 
-      {/* FiltersBar */}
-      <FiltersBar
-        dateFilter={dateFilter}
-        onDateFilterChange={setDateFilter}
-        messageTypeFilter={messageTypeFilter}
-        onMessageTypeFilterChange={setMessageTypeFilter}
-        totalMessages={messages.length}
-        filteredMessages={filteredCount}
-        onReset={resetFilters}
-      />
+      {/* Search & Filters */}
+      <div className="p-4 border-b bg-gray-50">
+        <SearchBar value={query} onChange={setQuery} onSearch={setQuery} />
+        <FiltersBar
+          dateFilter={dateFilter}
+          onDateFilterChange={setDateFilter}
+          messageTypeFilter={messageTypeFilter}
+          onMessageTypeFilterChange={setMessageTypeFilter}
+          totalMessages={messages.length}
+          filteredMessages={filteredCount}
+          onReset={resetFilters}
+        />
+      </div>
 
       {/* Main */}
       <main
-        className="max-w-4xl mx-auto px-4 py-6"
-        role="log"
-        aria-live="polite"
+        className="flex flex-col justify-center mx-auto max-w-4xl outline-none"
+        role="region"
+        aria-label="Message List"
+        tabIndex={0}
       >
-        {filteredGroups.length === 0 ? (
-          <p>No hay mensajes</p>
-        ) : (
-          <AnimatePresence>
-            {filteredGroups.map((group) => {
-              const groupKey = group.date;
-              const isNewGroup = !renderedGroupKeys.current.has(groupKey);
-              renderedGroupKeys.current.add(groupKey);
-
-              return (
-                <motion.div
-                  key={groupKey}
-                  initial={isNewGroup ? { opacity: 0, y: -10 } : undefined}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {/* Sticky group label */}
-                  <div className="sticky top-32 md:top-20 bg-gray-50 px-2 py-1 text-gray-700 font-semibold border-b border-gray-200 z-10 mt-4 mb-1">
-                    {group.label}
-                  </div>
-
-                  <div className="space-y-4 relative">
-                    {group.messages.map((message) => {
-                      const index = globalIndex++;
-                      const fixDate = setMilliseconds(
-                        setSeconds(new Date(message.message_date), 0),
-                        0
-                      );
-                      const motionKey = `${message.business_id}-${fixDate}`;
-                      const isNewMessage =
-                        !renderedMessageKeys.current.has(motionKey);
-                      renderedMessageKeys.current.add(motionKey);
-
-                      return (
-                        <motion.div
-                          key={motionKey}
-                          ref={(el) => {
-                            messageRefs.current[index] = el!;
-                          }}
-                          tabIndex={0}
-                          data-message-text={message.message_text}
-                          initial={
-                            isNewMessage ? { opacity: 0, y: 5 } : undefined
-                          }
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -5 }}
-                          transition={{ duration: 0.3 }}
-                          className="relative"
-                        >
-                          <MessageCard message={message} />
-
-                          {/* Pop-up "Copied!" */}
-                          {copiedIndex === index && (
-                            <motion.span
-                              initial={{ opacity: 0, y: -5 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -5 }}
-                              className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap z-20"
-                            >
-                              Copied!
-                            </motion.span>
-                          )}
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        )}
+        <MessageGroupList
+          groups={filteredGroups}
+          messageRefs={messageRefs}
+          activeIndex={activeIndex}
+          copiedIndex={copiedIndex}
+          query={query}
+          setActiveIndex={setActiveIndex}
+          setCopiedIndex={setCopiedIndex}
+        />
       </main>
 
       {/* Jump buttons */}
@@ -333,7 +131,6 @@ export default function MessagesPage() {
         >
           Go Top
         </GenericButton>
-
         <GenericButton
           variant="jump"
           size="xSmall"
@@ -343,6 +140,7 @@ export default function MessagesPage() {
           Go Bottom
         </GenericButton>
       </div>
+
       <div id="messagesEnd" ref={messagesEndRef} />
     </div>
   );

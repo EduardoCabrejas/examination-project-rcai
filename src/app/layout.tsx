@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RCAI List",
+  title: "AI Messaging Platform",
   description:
     "ReadyChat AI Test Project, in base a service to watch the list of messages of clients, bot and business with optim filters and style",
 };

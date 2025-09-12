@@ -2,8 +2,13 @@ import { Message } from "@/types/MessagesProps";
 import { setMilliseconds, setSeconds, format } from "date-fns";
 import { Copy, Users2, Bot, Briefcase } from "lucide-react";
 import { useState } from "react";
+import { highlightText } from "@/utils/highlightText";
 
-export function MessageCard({ message }: { message: Message }) {
+interface MessageCardProps {
+  message: Message;
+  query?: string;
+}
+export function MessageCard({ message, query }: MessageCardProps) {
   const isBot = message.bot_sender;
   const isCustomer = message.sent_by_customer;
   const [copied, setCopied] = useState(false);
@@ -88,7 +93,11 @@ export function MessageCard({ message }: { message: Message }) {
         </div>
       </div>
 
-      <p className="text-gray-800">{message.message_text}</p>
+      <p className="text-gray-800">
+        {query
+          ? highlightText(message.message_text, query)
+          : message.message_text}
+      </p>
       <div className="mt-2 text-xs text-black font-bold">
         Cliente #{message.customer} • {message.platform}
       </div>
